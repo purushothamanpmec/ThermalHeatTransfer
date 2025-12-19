@@ -21,7 +21,10 @@ import {
   Waves,
   ArrowRight,
   Home,
-  LayoutDashboard
+  LayoutDashboard,
+  Zap,
+  Star,
+  Clock
 } from 'lucide-react';
 
 const IconMap: Record<string, any> = {
@@ -190,9 +193,27 @@ const App = () => {
           {/* View: HOME */}
           {currentView === View.HOME && (
             <div className="p-8 max-w-6xl mx-auto space-y-10 animate-in fade-in duration-700">
-              <div className="space-y-2">
-                <h1 className="text-4xl font-black text-slate-900 tracking-tight">Welcome back, Engineer!</h1>
-                <p className="text-slate-500 max-w-2xl">ThermoMaster is your interactive suite for mastering Heat and Mass Transfer. Explore modules, run simulations, and consult with your AI Tutor.</p>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-black text-slate-900 tracking-tight">Welcome back, Engineer!</h1>
+                  <p className="text-slate-500 max-w-2xl">ThermoMaster is your interactive suite for mastering Heat and Mass Transfer. Explore modules, run simulations, and consult with your AI Tutor.</p>
+                </div>
+                <div className="flex gap-4">
+                   <div className="px-5 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Learning Streak</p>
+                      <div className="flex items-center gap-2 text-xl font-black text-amber-500">
+                         <Zap className="w-5 h-5 fill-current" />
+                         <span>12 Days</span>
+                      </div>
+                   </div>
+                   <div className="px-5 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm text-center">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Quiz Average</p>
+                      <div className="flex items-center gap-2 text-xl font-black text-blue-600">
+                         <Star className="w-5 h-5 fill-current" />
+                         <span>88%</span>
+                      </div>
+                   </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -215,9 +236,9 @@ const App = () => {
                 
                 <button 
                   onClick={() => setCurrentView(View.SIMULATION)}
-                  className="p-6 bg-slate-900 text-white rounded-2xl shadow-xl hover:translate-y-[-4px] transition-all text-left"
+                  className="p-6 bg-slate-900 text-white rounded-2xl shadow-xl hover:translate-y-[-4px] transition-all text-left group"
                 >
-                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-4">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-4 group-hover:rotate-12 transition-transform">
                     <FlaskConical className="w-5 h-5" />
                   </div>
                   <h3 className="font-bold mb-1">Interactive Labs</h3>
@@ -227,18 +248,45 @@ const App = () => {
                   </div>
                 </button>
               </div>
-              
-              <div className="bg-indigo-600 p-8 rounded-3xl text-white flex flex-col md:flex-row items-center justify-between gap-8">
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-bold">Stuck on a problem?</h2>
-                  <p className="text-indigo-100 text-sm max-w-md">Your AI Tutor is powered by Gemini 3 Pro and can help you solve complex analytical problems using your textbook or notes as a reference.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-indigo-600 p-8 rounded-3xl text-white flex flex-col justify-between items-start gap-6 relative overflow-hidden">
+                  <div className="relative z-10 space-y-2">
+                    <h2 className="text-2xl font-bold">Stuck on a problem?</h2>
+                    <p className="text-indigo-100 text-sm max-w-xs">Your AI Tutor is powered by Gemini 3 Pro and can help you solve complex analytical problems using your textbook or notes as a reference.</p>
+                  </div>
+                  <button 
+                    onClick={() => setCurrentView(View.CHAT)}
+                    className="relative z-10 px-8 py-3 bg-white text-indigo-600 rounded-2xl font-bold shadow-lg hover:bg-indigo-50 transition-colors shrink-0"
+                  >
+                    Start Consultation
+                  </button>
+                  <MessageSquareText className="absolute bottom-[-20px] right-[-20px] w-48 h-48 text-white/10 rotate-12" />
                 </div>
-                <button 
-                  onClick={() => setCurrentView(View.CHAT)}
-                  className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-bold shadow-lg hover:bg-indigo-50 transition-colors shrink-0"
-                >
-                  Start Consultation
-                </button>
+
+                <div className="bg-white border border-slate-100 p-8 rounded-3xl flex flex-col justify-between">
+                   <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
+                            <Clock className="w-5 h-5" />
+                         </div>
+                         <h3 className="font-bold text-slate-800">Recent Activity</h3>
+                      </div>
+                      <div className="space-y-3">
+                         {[
+                           { activity: "Completed Quiz: Conduction", time: "2 hours ago" },
+                           { activity: "Viewed Lesson: Boundary Layers", time: "Yesterday" },
+                           { activity: "Ran Mass Diffusion Simulation", time: "2 days ago" }
+                         ].map((item, idx) => (
+                           <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2 last:border-0">
+                              <span className="text-slate-600 font-medium">{item.activity}</span>
+                              <span className="text-slate-400 text-xs font-mono">{item.time}</span>
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                   <button onClick={() => setCurrentView(View.LESSON)} className="mt-6 text-blue-600 text-xs font-bold hover:underline">View All Study History</button>
+                </div>
               </div>
             </div>
           )}

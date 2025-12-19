@@ -1,12 +1,13 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, AreaChart, Area, Legend 
+  ResponsiveContainer, AreaChart, Area, ReferenceLine
 } from 'recharts';
 import { 
-  Thermometer, Activity, Wind, MoveRight, 
-  RefreshCw, Play, Pause, Waves, Beaker
+  Thermometer, Activity, Wind, 
+  RefreshCw, Play, Pause, Beaker,
+  AlertTriangle, CheckCircle2
 } from 'lucide-react';
 
 // --- 1. 1D Steady Conduction ---
@@ -88,11 +89,11 @@ const ConductionSim = () => {
   );
 };
 
-// --- 2. Mass Diffusion (New) ---
+// --- 2. Mass Diffusion (Transient) ---
 const MassDiffusionSim = () => {
-  const [Ca0, setCa0] = useState(1.0); // Concentration at boundary
-  const [Dab, setDab] = useState(2.0e-5); // Diffusion coefficient
-  const [L, setL] = useState(0.1); // Length of tube
+  const [Ca0, setCa0] = useState(1.0); 
+  const [Dab, setDab] = useState(2.0e-5); 
+  const [L, setL] = useState(0.1); 
   const [time, setTime] = useState(0);
   const [running, setRunning] = useState(false);
   
@@ -110,12 +111,10 @@ const MassDiffusionSim = () => {
         setConc(prev => {
           const next = [...prev];
           const Fo = (Dab * dt) / (dx * dx);
-          // Boundary at x=0 is constant Ca0
           next[0] = Ca0;
           for (let i = 1; i < nodes - 1; i++) {
             next[i] = prev[i] + Fo * (prev[i-1] - 2 * prev[i] + prev[i+1]);
           }
-          // Impermeable boundary at x=L
           next[nodes-1] = next[nodes-2];
           return next;
         });
@@ -139,47 +138,192 @@ const MassDiffusionSim = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
-          <div className="flex gap-2 mb-4">
-            <button 
-              onClick={() => setRunning(!running)} 
-              className={`flex-1 py-2 rounded-lg font-bold flex items-center justify-center gap-2 ${running ? 'bg-amber-100 text-amber-700' : 'bg-emerald-600 text-white shadow-md'}`}
-            >
-              {running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {running ? 'Stop' : 'Simulate'}
+          <div className="flex gap-2">
+            <button onClick={() => setRunning(!running)} className={`flex-1 py-2 rounded-lg font-bold flex items-center justify-center gap-2 ${running ? 'bg-amber-100 text-amber-700' : 'bg-emerald-600 text-white'}`}>
+              {running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />} {running ? 'Stop' : 'Run'}
             </button>
-            <button onClick={reset} className="p-2 bg-white border rounded-lg hover:bg-slate-100">
-              <RefreshCw className="w-4 h-4 text-slate-500" />
-            </button>
+            <button onClick={reset} className="p-2 bg-white border rounded-lg hover:bg-slate-100"><RefreshCw className="w-4 h-4 text-slate-500" /></button>
           </div>
           <div>
-            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
-              <span>Initial Conc. (C0)</span>
-              <span>{Ca0} mol/m³</span>
-            </label>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2"><span>Source Conc.</span><span>{Ca0} mol/m³</span></label>
             <input type="range" min="0.1" max="5" step="0.1" value={Ca0} onChange={e => setCa0(+e.target.value)} className="w-full accent-emerald-500" />
           </div>
           <div>
-            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
-              <span>Diffusivity (Dab)</span>
-              <span>{Dab.toExponential(1)} m²/s</span>
-            </label>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2"><span>Diffusivity</span><span>{Dab.toExponential(1)}</span></label>
             <input type="range" min="1e-6" max="1e-4" step="1e-6" value={Dab} onChange={e => setDab(+e.target.value)} className="w-full accent-emerald-600" />
           </div>
-          <div className="pt-4 border-t text-center">
-            <p className="text-[10px] text-slate-400 font-bold">ELAPSED TIME</p>
-            <p className="text-2xl font-mono text-slate-800">{time.toFixed(0)}s</p>
+        </div>
+        <div className="lg:col-span-2 h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={conc.map((c, i) => ({ x: +(i * dx).toFixed(3), c }))}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="x" label={{ value: 'Distance (m)', position: 'bottom', fontSize: 10 }} />
+              <YAxis domain={[0, 5]} label={{ value: 'Conc.', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <Tooltip />
+              <Area type="monotone" dataKey="c" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 3. Convection Boundary Layer (New) ---
+const ConvectionSim = () => {
+  const [velocity, setVelocity] = useState(5);
+  const [prandtl, setPrandtl] = useState(0.71); // Air
+  const nu = 1.5e-5; // Kinematic viscosity of air at room temp
+
+  const data = useMemo(() => {
+    const points = [];
+    for (let i = 1; i <= 20; i++) {
+      const x = i * 0.05; // 1 meter total
+      const re = (velocity * x) / nu;
+      // Laminar Boundary Layer (Blasius)
+      const delta = (5 * x) / Math.sqrt(re);
+      const deltaT = delta / Math.pow(prandtl, 1/3);
+      points.push({ 
+        x: parseFloat(x.toFixed(2)), 
+        delta: parseFloat((delta * 1000).toFixed(2)), // in mm
+        deltaT: parseFloat((deltaT * 1000).toFixed(2)) 
+      });
+    }
+    return points;
+  }, [velocity, prandtl]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">Convection Boundary Layer</h3>
+          <p className="text-xs text-slate-500">Prandtl Number Analogy: $\delta_t = \delta / Pr^{1/3}$</p>
+        </div>
+        <div className="px-3 py-1 bg-sky-50 text-sky-700 text-[10px] font-bold rounded-full border border-sky-100 uppercase tracking-widest">
+          Fluid Dynamics
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
+          <div>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
+              <span>Fluid Velocity ($U_\infty$)</span>
+              <span className="text-sky-600 font-mono">{velocity} m/s</span>
+            </label>
+            <input type="range" min="1" max="50" value={velocity} onChange={e => setVelocity(+e.target.value)} className="w-full accent-sky-500" />
+          </div>
+          <div>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
+              <span>Prandtl Number ($Pr$)</span>
+              <span className="text-amber-600 font-mono">{prandtl.toFixed(2)}</span>
+            </label>
+            <input type="range" min="0.01" max="10" step="0.01" value={prandtl} onChange={e => setPrandtl(+e.target.value)} className="w-full accent-amber-500" />
+            <div className="flex justify-between text-[8px] text-slate-400 mt-1 font-bold">
+              <span>LIQUID METAL</span>
+              <span>AIR</span>
+              <span>WATER</span>
+              <span>OIL</span>
+            </div>
+          </div>
+          <div className="p-3 bg-white rounded-lg border border-slate-200 text-center">
+            <p className="text-[9px] text-slate-400 font-bold uppercase">Reynolds at Exit</p>
+            <p className="text-lg font-black text-slate-700">{((velocity * 1) / nu).toExponential(2)}</p>
           </div>
         </div>
 
         <div className="lg:col-span-2 h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={conc.map((c, i) => ({ x: +(i * dx).toFixed(3), c }))}>
+            <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="x" label={{ value: 'Distance (m)', position: 'bottom', offset: 0, fontSize: 10 }} />
-              <YAxis domain={[0, 5]} label={{ value: 'Conc. (mol/m³)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <XAxis dataKey="x" label={{ value: 'Distance along Plate (m)', position: 'bottom', fontSize: 10 }} />
+              <YAxis label={{ value: 'Thickness (mm)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
               <Tooltip />
-              <Area type="monotone" dataKey="c" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
+              <Area type="monotone" dataKey="delta" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.1} name="Velocity BL (δ)" />
+              <Area type="monotone" dataKey="deltaT" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.1} name="Thermal BL (δt)" />
             </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 4. Transient Heat (Lumped System) (New) ---
+const TransientSim = () => {
+  const [h, setH] = useState(50); // Convection coeff
+  const [k, setK] = useState(20); // Thermal conductivity
+  const [Lc, setLc] = useState(0.01); // Characteristic length
+  const rho = 7800; // steel
+  const cp = 480; // steel
+  const Ti = 500;
+  const Tinf = 25;
+
+  const bi = (h * Lc) / k;
+  const isLumped = bi < 0.1;
+
+  const data = useMemo(() => {
+    const points = [];
+    const tau = (rho * Lc * cp) / h;
+    for (let timeStep = 0; timeStep <= 500; timeStep += 10) {
+      const temp = Tinf + (Ti - Tinf) * Math.exp(-timeStep / tau);
+      points.push({ time: timeStep, temp: parseFloat(temp.toFixed(1)) });
+    }
+    return points;
+  }, [h, Lc, Ti, Tinf]);
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">Transient Heat: Lumped System</h3>
+          <p className="text-xs text-slate-500">Cooling Curve: $T(t) = T_\infty + (T_i - T_\infty)e^{-t/\tau}$</p>
+        </div>
+        <div className="px-3 py-1 bg-rose-50 text-rose-700 text-[10px] font-bold rounded-full border border-rose-100 uppercase tracking-widest">
+          Transient
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
+          <div>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
+              <span>Conv. Coeff ($h$)</span>
+              <span className="font-mono">{h} W/m²K</span>
+            </label>
+            <input type="range" min="5" max="500" value={h} onChange={e => setH(+e.target.value)} className="w-full accent-rose-500" />
+          </div>
+          <div>
+            <label className="flex justify-between text-[11px] font-bold text-slate-500 mb-2">
+              <span>Size ($L_c$)</span>
+              <span className="font-mono">{Lc * 1000} mm</span>
+            </label>
+            <input type="range" min="0.001" max="0.1" step="0.001" value={Lc} onChange={e => setLc(+e.target.value)} className="w-full accent-slate-500" />
+          </div>
+          
+          <div className={`p-4 rounded-xl border-2 transition-colors flex flex-col items-center gap-2 ${isLumped ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+            <div className="flex items-center gap-2 font-black text-xs">
+              {isLumped ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+              Biot Number: {bi.toFixed(3)}
+            </div>
+            <p className="text-[10px] text-center font-medium">
+              {isLumped 
+                ? "Lumped Analysis Valid (Bi < 0.1)" 
+                : "Internal resistance significant! (Bi > 0.1)"}
+            </p>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="time" label={{ value: 'Time (s)', position: 'bottom', fontSize: 10 }} />
+              <YAxis domain={[0, 550]} label={{ value: 'Temp (°C)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+              <Tooltip />
+              <ReferenceLine y={Tinf} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: 'Ambient', position: 'right', fontSize: 10 }} />
+              <Line type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={3} dot={false} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -193,9 +337,9 @@ export const Simulations = () => {
   
   const tabs = [
     { id: '1d', label: '1D Conduction', icon: Thermometer },
+    { id: 'convection', label: 'Boundary Layer', icon: Wind },
+    { id: 'transient', label: 'Transient Cooling', icon: Activity },
     { id: 'mass', label: 'Mass Diffusion', icon: Beaker },
-    { id: 'convection', label: 'Convection BL', icon: Wind },
-    { id: 'transient', label: 'Transient Heat', icon: Activity },
   ];
 
   return (
@@ -216,18 +360,8 @@ export const Simulations = () => {
       <div className="animate-in fade-in slide-in-from-top-4 duration-500">
         {active === '1d' && <ConductionSim />}
         {active === 'mass' && <MassDiffusionSim />}
-        {active === 'convection' && (
-          <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-             <Wind className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-             <p className="text-slate-500 font-medium italic">Convection simulation is being recalibrated... Coming soon!</p>
-          </div>
-        )}
-        {active === 'transient' && (
-          <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-             <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-             <p className="text-slate-500 font-medium italic">Transient Heat Transfer Lab is currently offline for maintenance.</p>
-          </div>
-        )}
+        {active === 'convection' && <ConvectionSim />}
+        {active === 'transient' && <TransientSim />}
       </div>
     </div>
   );
