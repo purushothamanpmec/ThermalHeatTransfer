@@ -1,5 +1,7 @@
 {
   "name": "ThermoMaster: HMT Learning Suite",
   "description": "A comprehensive interactive learning application for Heat and Mass Transfer engineering students, featuring AI-generated lessons, interactive simulations, adaptive quizzes, and a document-aware AI tutor.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

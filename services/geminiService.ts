@@ -2,43 +2,44 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { QuizQuestion } from "../types";
 
-const API_KEY = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// The API key is obtained exclusively from the environment variable process.env.API_KEY.
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Models
-const TEXT_MODEL = 'gemini-3-flash-preview';
+// Models based on task requirements
+const CONTENT_MODEL = 'gemini-3-flash-preview';
 const TUTOR_MODEL = 'gemini-3-pro-preview';
 
 /**
  * Generates educational content for a specific topic.
  */
 export const generateLessonContent = async (topic: string, unit: string) => {
-  if (!API_KEY) throw new Error("API Key missing");
-
+  const ai = getAI();
   const prompt = `
-    You are an expert Engineering Professor specializing in Heat and Mass Transfer.
-    Create a concise but comprehensive lesson on the topic: "${topic}" from the unit "${unit}".
+    You are an expert Engineering Professor specializing in Heat and Mass Transfer (HMT).
+    Create a detailed, high-quality lesson on the topic: "${topic}" from the unit "${unit}".
     
     Structure the response in Markdown:
-    1. **Concept Definition**: Clear explanation.
-    2. **Mathematical Formulation**: Relevant formulas (use clean text representation or LaTeX like $E=mc^2$).
-    3. **Key Insights**: Bullet points on physical significance.
-    4. **Real-world Example**: A practical engineering application.
-    5. **Diagram Description**: A text description of what a diagram for this concept would look like.
+    1. **Overview**: High-level explanation of the concept.
+    2. **Governing Equations**: State the fundamental laws (Fourier's, Newton's, Stefan-Boltzmann, or Fick's) and derive/present key formulas. Use LaTeX for math ($E=mc^2$).
+    3. **Physical Significance**: What do the parameters (like Thermal Conductivity, Convection Coeff, etc.) mean physically?
+    4. **Numerical Example**: Provide a simple worked-out numerical problem description.
+    5. **Industrial Applications**: Where is this used in modern engineering?
+    6. **Diagram Prompt**: Describe a detailed schematic diagram for this topic.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: CONTENT_MODEL,
       contents: prompt,
       config: {
-        systemInstruction: "You are a rigorous engineering tutor. Provide accurate, professional, and clear explanations.",
+        systemInstruction: "You are a rigorous and helpful engineering professor. Use professional terminology and clear LaTeX formatting for equations.",
+        temperature: 0.7,
       }
     });
     return response.text;
   } catch (error) {
     console.error("Lesson generation failed:", error);
-    return "Failed to load lesson content.";
+    return "Failed to load lesson content. Please ensure the API Key is valid.";
   }
 };
 
@@ -46,19 +47,21 @@ export const generateLessonContent = async (topic: string, unit: string) => {
  * Generates an SVG code string for a diagram.
  */
 export const generateDiagramSvg = async (topic: string) => {
-  if (!API_KEY) return null;
-
+  const ai = getAI();
   const prompt = `
-    Create a simple, schematic SVG code (raw <svg> string) explaining: "${topic}".
-    Use engineering schematic style. Ensure viewBox="0 0 400 300".
+    Generate a clean, professional engineering schematic SVG for: "${topic}".
+    Use a minimalist style with lines, simple shapes, and clear text labels.
+    Return ONLY the raw <svg>...</svg> code.
+    Ensure viewBox="0 0 400 250" and use neutral colors (slate, blue, red for heat).
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: CONTENT_MODEL,
       contents: prompt,
     });
     let svg = response.text || "";
+    // Clean markdown wrappers if present
     svg = svg.replace(/```xml/g, '').replace(/```svg/g, '').replace(/```/g, '').trim();
     return svg.startsWith('<svg') ? svg : null;
   } catch (error) {
@@ -67,20 +70,19 @@ export const generateDiagramSvg = async (topic: string) => {
 };
 
 /**
- * Generates quiz questions with robust error handling.
+ * Generates quiz questions with robust schema.
  */
 export const generateQuizQuestions = async (unitTitle: string, difficulty: string): Promise<QuizQuestion[]> => {
-  if (!API_KEY) throw new Error("API Key missing");
-
+  const ai = getAI();
   const prompt = `
-    Generate 3 ${difficulty} level multiple choice questions for the engineering unit: "${unitTitle}".
+    Generate 5 ${difficulty} level multiple choice questions for the engineering unit: "${unitTitle}".
+    Focus on conceptual understanding and basic calculations.
     Return purely a JSON array. 
-    Schema: [{ "id": number, "question": "string", "options": ["s1", "s2", "s3", "s4"], "correctAnswerIndex": number, "explanation": "string", "difficulty": "${difficulty}" }]
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: CONTENT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -102,8 +104,7 @@ export const generateQuizQuestions = async (unitTitle: string, difficulty: strin
       }
     });
     
-    const text = response.text.trim();
-    return JSON.parse(text);
+    return JSON.parse(response.text.trim());
   } catch (error) {
     console.error("Quiz generation failed:", error);
     return [];
@@ -111,16 +112,15 @@ export const generateQuizQuestions = async (unitTitle: string, difficulty: strin
 };
 
 /**
- * Chat with the AI Tutor, aware of the provided PDF link as default source.
+ * Chat with the AI Tutor using reasoning.
  */
 export const sendTutorMessage = async (
   message: string, 
-  history: {role: string, parts: {text: string}[]}[], 
+  history: {role: 'user' | 'model', parts: {text: string}[]}[], 
   fileBase64?: string,
   mimeType: string = 'application/pdf'
 ) => {
-  if (!API_KEY) throw new Error("API Key missing");
-
+  const ai = getAI();
   const parts: any[] = [{ text: message }];
   
   if (fileBase64) {
@@ -130,25 +130,23 @@ export const sendTutorMessage = async (
   }
 
   try {
-    const chat = ai.chats.create({
+    const response = await ai.models.generateContent({
       model: TUTOR_MODEL,
+      contents: { parts: parts },
       config: {
-        systemInstruction: `You are the ThermoMaster AI Tutor.
-        PRIMARY SOURCE: You have access to the knowledge within the document at https://drive.google.com/file/d/1hq_VegisUcJbj84iFerwpdRaQykznxjG/view.
-        When asked theory or analytical problems, use this document as your primary reference and source of truth.
-        If a user provides a new document, prioritize the new document for that specific query.
-        Be precise with engineering formulas and units.`,
-      },
-      history: history.map(h => ({
-        role: h.role,
-        parts: h.parts
-      }))
+        systemInstruction: `You are the ThermoMaster AI Tutor, an expert in Heat and Mass Transfer.
+        Use reasoning to solve complex engineering problems. 
+        Focus on accuracy in formulas, unit conversions, and physical interpretations.
+        If the user provides a PDF or image, analyze it thoroughly as the primary context.`,
+        thinkingConfig: { thinkingBudget: 4000 }
+      }
     });
-
-    const result = await chat.sendMessage({ message: { parts: parts } });
-    return result.text;
-  } catch (error) {
+    return response.text;
+  } catch (error: any) {
     console.error("Chat failed:", error);
-    return "I'm having trouble connecting to the knowledge base. Please try again.";
+    if (error?.message?.includes("Requested entity was not found")) {
+      return "Error: API model access issue. Ensure you are using a supported project/key.";
+    }
+    return "I'm having trouble processing that request. Let's try another question.";
   }
 };
