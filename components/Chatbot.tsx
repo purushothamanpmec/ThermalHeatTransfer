@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Bot, User, FileText, Loader2, X } from 'lucide-react';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { sendTutorMessage } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 
@@ -7,18 +7,52 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   text: string;
-  fileName?: string;
 }
 
-export const Chatbot = () => {
+interface ChatbotProps {
+  activeTopic?: string;
+}
+
+/**
+ * Robust Math Renderer
+ * Scans the provided element for LaTeX patterns and replaces them with typeset math.
+ * Wraps call in a try-catch to ignore internal KaTeX quirks errors.
+ */
+const renderMath = (el: HTMLElement | null) => {
+  if (!el) return;
+  
+  const attemptRender = () => {
+    try {
+      if ((window as any).renderMathInElement) {
+        (window as any).renderMathInElement(el, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false,
+          trust: true
+        });
+      }
+    } catch (error) {
+      console.warn("Math rendering suppressed an error:", error);
+    }
+  };
+
+  attemptRender();
+  // Small delayed retry to catch late-rendering Markdown segments
+  setTimeout(attemptRender, 100);
+};
+
+export const Chatbot: React.FC<ChatbotProps> = ({ activeTopic = "General" }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', role: 'model', text: "Hello! I'm your Heat & Mass Transfer Tutor. You can ask me to solve problems, explain concepts, or upload a PDF textbook/notes for me to reference!" }
+    { id: '1', role: 'model', text: `Hello! I'm your AI Tutor. I'm currently focused on the context of **${activeTopic}** from your lecture slides. How can I help you today?` }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [attachedFile, setAttachedFile] = useState<{name: string, data: string, type: string} | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -26,104 +60,84 @@ export const Chatbot = () => {
 
   useEffect(scrollToBottom, [messages]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check size (Gemini limit is generous, but let's be safe for browser memory ~10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File is too large. Please upload a PDF smaller than 10MB.");
-      return;
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      renderMath(chatContainerRef.current);
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      // remove data url prefix
-      const base64Data = base64String.split(',')[1];
-      
-      setAttachedFile({
-        name: file.name,
-        data: base64Data,
-        type: file.type
-      });
-    };
-    reader.readAsDataURL(file);
-  };
+  }, [messages, isLoading]);
 
   const handleSend = async () => {
-    if ((!input.trim() && !attachedFile) || isLoading) return;
+    if (!input.trim() || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
       text: input,
-      fileName: attachedFile?.name
     };
 
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
 
-    // Prepare history for API
-    const history = messages.map(m => ({
-      role: m.role,
-      parts: [{ text: m.text }]
-    }));
+    try {
+      const history = messages.map(m => ({
+        role: m.role,
+        parts: [{ text: m.text }]
+      }));
 
-    const responseText = await sendTutorMessage(
-      userMsg.text || "Analyze this document.",
-      history,
-      attachedFile?.data,
-      attachedFile?.type
-    );
+      const responseText = await sendTutorMessage(
+        userMsg.text,
+        history as any,
+        activeTopic
+      );
 
-    const modelMsg: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: 'model',
-      text: responseText
-    };
+      const modelMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: responseText
+      };
 
-    setMessages(prev => [...prev, modelMsg]);
-    setIsLoading(false);
-    setAttachedFile(null); // Clear file after sending
-    if (fileInputRef.current) fileInputRef.current.value = '';
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (err) {
+      console.error("Chat error:", err);
+      setMessages(prev => [...prev, { 
+        id: 'error', 
+        role: 'model', 
+        text: "I encountered an error while processing your request. Please try again." 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in">
+    <div className="flex flex-col h-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden animate-in fade-in">
       {/* Header */}
-      <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center gap-3">
-        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-          <Bot className="w-6 h-6 text-indigo-600" />
+      <div className="bg-slate-900 p-6 flex items-center gap-3 shrink-0">
+        <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+          <Bot className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-800">AI Tutor</h3>
-          <p className="text-xs text-slate-500">Powered by Gemini 1.5 • Supports PDF Analysis</p>
+          <h3 className="font-bold text-white">Engineering Tutor</h3>
+          <p className="text-[10px] text-blue-300 font-bold uppercase tracking-widest">Grounding: PPT Slides</p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-blue-600' : 'bg-indigo-600'}`}>
-                {msg.role === 'user' ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
+            <div className={`flex gap-4 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center shadow-sm ${msg.role === 'user' ? 'bg-slate-900' : 'bg-blue-600'}`}>
+                {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
               </div>
               
-              <div className={`p-4 rounded-2xl shadow-sm text-sm ${
+              <div className={`p-5 rounded-2xl text-sm ${
                 msg.role === 'user' 
-                  ? 'bg-blue-600 text-white rounded-tr-none' 
-                  : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none'
+                  ? 'bg-slate-900 text-white rounded-tr-none shadow-md' 
+                  : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none shadow-sm'
               }`}>
-                {msg.fileName && (
-                  <div className="flex items-center gap-2 mb-2 p-2 bg-black/10 rounded">
-                    <FileText className="w-4 h-4" />
-                    <span className="text-xs font-mono truncate max-w-[200px]">{msg.fileName}</span>
-                  </div>
-                )}
-                <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:text-slate-100">
+                <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-strong:text-blue-600">
                   <ReactMarkdown>{msg.text}</ReactMarkdown>
                 </div>
               </div>
@@ -132,10 +146,10 @@ export const Chatbot = () => {
         ))}
         {isLoading && (
           <div className="flex justify-start">
-             <div className="flex gap-3 max-w-[85%]">
-               <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center"><Bot className="w-5 h-5 text-white" /></div>
-               <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200 flex items-center gap-2 text-slate-500">
-                 <Loader2 className="w-4 h-4 animate-spin" /> Thinking...
+             <div className="flex gap-4 max-w-[80%]">
+               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm"><Bot className="w-4 h-4 text-white" /></div>
+               <div className="bg-white p-5 rounded-2xl rounded-tl-none border border-slate-200 flex items-center gap-2 text-slate-500 shadow-sm italic">
+                 <Loader2 className="w-3 h-3 animate-spin" /> Analyzing lecture notes...
                </div>
              </div>
           </div>
@@ -144,45 +158,22 @@ export const Chatbot = () => {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white border-t border-slate-200">
-        {attachedFile && (
-           <div className="flex items-center gap-2 mb-2 p-2 bg-slate-100 rounded-lg w-fit">
-             <FileText className="w-4 h-4 text-slate-500" />
-             <span className="text-xs font-medium text-slate-700">{attachedFile.name}</span>
-             <button onClick={() => setAttachedFile(null)} className="p-1 hover:bg-slate-200 rounded-full">
-               <X className="w-3 h-3 text-slate-500" />
-             </button>
-           </div>
-        )}
-        <div className="flex gap-2">
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-            title="Upload PDF"
-          >
-            <Paperclip className="w-5 h-5" />
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            className="hidden" 
-            accept="application/pdf, image/*" 
-          />
+      <div className="p-6 bg-white border-t border-slate-100 shrink-0">
+        <div className="flex gap-3 bg-slate-100 p-2 rounded-2xl focus-within:ring-2 focus-within:ring-blue-500 transition-all shadow-inner">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask a question or upload notes..."
-            className="flex-1 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-0 rounded-full px-4 text-sm"
+            placeholder="Ask about a formula or concept from the slides..."
+            className="flex-1 bg-transparent border-transparent focus:ring-0 px-4 text-sm outline-none text-slate-700"
           />
           <button 
             onClick={handleSend}
-            disabled={(!input && !attachedFile) || isLoading}
-            className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 transition-all"
+            disabled={!input.trim() || isLoading}
+            className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md shrink-0 active:scale-95"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4" />
           </button>
         </div>
       </div>

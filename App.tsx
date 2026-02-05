@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { COURSE_CONTENT } from './constants';
 import { UnitId, Unit } from './types';
-import { generateLessonContent, generateDiagramSvg } from './services/geminiService';
+import { getLessonFromPPT } from './services/geminiService';
+import { COURSE_PPT_DATA } from './data/courseData';
 import { Simulations } from './components/Simulations';
 import { Quiz } from './components/Quiz';
 import { Chatbot } from './components/Chatbot';
+import { VisualReference } from './components/VisualReference';
 import ReactMarkdown from 'react-markdown';
 import { 
   BookOpen, 
@@ -12,13 +14,16 @@ import {
   FlaskConical, 
   GraduationCap, 
   MessageSquareText, 
-  ChevronRight,
   Thermometer,
   Wind,
   Droplets,
   Sun,
   Waves,
-  ArrowLeft
+  ArrowRight,
+  Home,
+  LayoutDashboard,
+  Presentation,
+  Sigma
 } from 'lucide-react';
 
 const IconMap: Record<string, any> = {
@@ -30,70 +35,102 @@ const IconMap: Record<string, any> = {
 };
 
 enum View {
+  HOME = 'HOME',
   LESSON = 'LESSON',
   SIMULATION = 'SIMULATION',
   QUIZ = 'QUIZ',
   CHAT = 'CHAT'
 }
 
+/**
+ * Robust Math Renderer
+ * Uses the auto-render extension of KaTeX.
+ * Retries if the library is still loading.
+ */
+const renderMath = (el: HTMLElement | null) => {
+  if (!el) return;
+  
+  const attempt = () => {
+    try {
+      if (typeof (window as any).renderMathInElement === 'function') {
+        (window as any).renderMathInElement(el, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false,
+          trust: true
+        });
+      }
+    } catch (error) {
+      console.warn("KaTeX rendering deferred or failed:", error);
+    }
+  };
+
+  // Immediate attempt and a delayed one for React transition completeness
+  attempt();
+  setTimeout(attempt, 150);
+};
+
 const App = () => {
   const [activeUnit, setActiveUnit] = useState<Unit>(COURSE_CONTENT[0]);
   const [activeTopic, setActiveTopic] = useState<string>(COURSE_CONTENT[0].topics[0]);
-  const [currentView, setCurrentView] = useState<View>(View.LESSON);
+  const [currentView, setCurrentView] = useState<View>(View.HOME);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
-  // Content State
   const [lessonContent, setLessonContent] = useState<string>("");
-  const [diagramSvg, setDiagramSvg] = useState<string | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
 
-  // Fetch content when topic changes
   useEffect(() => {
     if (currentView === View.LESSON) {
-      const fetchContent = async () => {
-        setLoadingContent(true);
-        setDiagramSvg(null); // Reset diagram
-        try {
-          // Parallel fetch for speed
-          const [text, svg] = await Promise.all([
-            generateLessonContent(activeTopic, activeUnit.title),
-            generateDiagramSvg(activeTopic)
-          ]);
-          setLessonContent(text || "Content unavailable.");
-          setDiagramSvg(svg);
-        } catch (e) {
-          console.error(e);
-          setLessonContent("Error loading content. Please check API Key.");
-        } finally {
-          setLoadingContent(false);
-        }
-      };
-      fetchContent();
+      setLoadingContent(true);
+      const text = getLessonFromPPT(activeTopic);
+      setLessonContent(text);
+      setLoadingContent(false);
     }
   }, [activeTopic, activeUnit, currentView]);
 
+  useEffect(() => {
+    if (!loadingContent && currentView === View.LESSON) {
+      const timer = setTimeout(() => {
+        renderMath(document.getElementById('lesson-markdown-container'));
+        renderMath(document.getElementById('topic-equation-box'));
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [lessonContent, loadingContent, currentView, activeTopic]);
+
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const activeTopicData = COURSE_PPT_DATA[activeTopic];
 
   return (
-    <div className="flex h-screen bg-slate-100 overflow-hidden font-sans">
-      
-      {/* Sidebar */}
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       <aside 
         className={`${
           sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'
-        } fixed inset-y-0 left-0 z-50 bg-slate-900 text-slate-300 transition-all duration-300 ease-in-out flex flex-col md:relative md:translate-x-0 overflow-hidden border-r border-slate-800`}
+        } fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col md:relative md:translate-x-0 overflow-hidden shadow-sm`}
       >
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">T</span>
+        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+          <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+            <Thermometer className="text-white w-5 h-5" />
           </div>
-          <h1 className="text-xl font-bold text-white tracking-tight">ThermoMaster</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-800">ThermoMaster</h1>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* Main Modules */}
+          <button
+            onClick={() => setCurrentView(View.HOME)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+              currentView === View.HOME ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Home className="w-4 h-4" />
+            <span>Overview</span>
+          </button>
+
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-2">Course Units</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-4">Lecture Series</p>
             <div className="space-y-1">
               {COURSE_CONTENT.map((unit) => {
                 const Icon = IconMap[unit.icon] || BookOpen;
@@ -104,48 +141,46 @@ const App = () => {
                       setActiveUnit(unit);
                       setActiveTopic(unit.topics[0]);
                       setCurrentView(View.LESSON);
-                      if (window.innerWidth < 768) setSidebarOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       activeUnit.id === unit.id && currentView === View.LESSON
-                        ? 'bg-blue-600/10 text-blue-400'
-                        : 'hover:bg-slate-800 hover:text-white'
+                        ? 'bg-blue-50 text-blue-700 font-bold'
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
-                    <span>{unit.title.split(': ')[1]}</span> {/* Shorten title */}
+                    <span className="truncate">{unit.title.split(': ')[1]}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Tools */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-2">Interactive Tools</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-4">Interactive</p>
             <div className="space-y-1">
               <button
-                onClick={() => { setCurrentView(View.SIMULATION); if(window.innerWidth < 768) setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  currentView === View.SIMULATION ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'
+                onClick={() => setCurrentView(View.SIMULATION)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  currentView === View.SIMULATION ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <FlaskConical className="w-4 h-4" />
                 <span>Simulations</span>
               </button>
               <button
-                onClick={() => { setCurrentView(View.QUIZ); if(window.innerWidth < 768) setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  currentView === View.QUIZ ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'
+                onClick={() => setCurrentView(View.QUIZ)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  currentView === View.QUIZ ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
                 <span>Quiz Zone</span>
               </button>
               <button
-                onClick={() => { setCurrentView(View.CHAT); if(window.innerWidth < 768) setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  currentView === View.CHAT ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 hover:text-white'
+                onClick={() => setCurrentView(View.CHAT)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  currentView === View.CHAT ? 'bg-amber-50 text-amber-700 font-bold' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <MessageSquareText className="w-4 h-4" />
@@ -154,92 +189,134 @@ const App = () => {
             </div>
           </div>
         </nav>
-        
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-          Engineered for Students
-        </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        {/* Header */}
-        <header className="bg-white border-b border-slate-200 h-16 flex items-center px-6 justify-between flex-shrink-0">
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center px-6 justify-between flex-shrink-0 z-10">
           <div className="flex items-center gap-4">
-            <button onClick={toggleSidebar} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600">
+            <button onClick={toggleSidebar} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 md:hidden">
               <Menu className="w-5 h-5" />
             </button>
-            <h2 className="text-lg font-semibold text-slate-800 hidden md:block">
-              {currentView === View.LESSON ? activeUnit.title : currentView}
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <LayoutDashboard className="w-4 h-4" />
+              {currentView === View.HOME ? 'Course Dashboard' : currentView}
             </h2>
-          </div>
-          {/* Simple API Key status indicator (mock) */}
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${process.env.API_KEY ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-xs font-medium text-slate-500">Gemini {process.env.API_KEY ? 'Connected' : 'Missing Key'}</span>
           </div>
         </header>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
-          
-          {/* View: LESSON */}
+        <div className="flex-1 overflow-y-auto">
+          {currentView === View.HOME && (
+            <div className="p-8 max-w-6xl mx-auto space-y-10 animate-in fade-in duration-700">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {COURSE_CONTENT.map(unit => (
+                  <button 
+                    key={unit.id}
+                    onClick={() => { setActiveUnit(unit); setCurrentView(View.LESSON); }}
+                    className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all text-left group"
+                  >
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      {IconMap[unit.icon] ? React.createElement(IconMap[unit.icon], { className: 'w-5 h-5' }) : <BookOpen className="w-5 h-5" />}
+                    </div>
+                    <h3 className="font-bold text-slate-800 mb-1">{unit.title}</h3>
+                    <p className="text-xs text-slate-500 mb-4">{unit.topics.length} Lecture Topics</p>
+                    <div className="flex items-center text-blue-600 text-xs font-bold gap-2">
+                      Open Module <ArrowRight className="w-3 h-3" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {currentView === View.LESSON && (
-            <div className="max-w-5xl mx-auto flex flex-col lg:flex-row gap-8">
-              {/* Topic List (Sub-sidebar) */}
-              <div className="lg:w-64 flex-shrink-0">
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Module Topics</h3>
-                <div className="space-y-1">
-                  {activeUnit.topics.map(topic => (
-                    <button
-                      key={topic}
-                      onClick={() => setActiveTopic(topic)}
-                      className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-colors border-l-2 ${
-                        activeTopic === topic
-                          ? 'bg-white border-blue-500 text-blue-700 shadow-sm'
-                          : 'border-transparent text-slate-600 hover:bg-slate-200/50'
-                      }`}
-                    >
-                      {topic}
-                    </button>
-                  ))}
+            <div className="p-6 md:p-8 max-w-[1500px] mx-auto flex flex-col lg:flex-row gap-10">
+              <div className="lg:w-72 shrink-0 space-y-6">
+                <div className="sticky top-6 space-y-6">
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Module Topics</h3>
+                    <div className="space-y-1">
+                      {activeUnit.topics.map(topic => (
+                        <button
+                          key={topic}
+                          onClick={() => setActiveTopic(topic)}
+                          className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all border ${
+                            activeTopic === topic
+                              ? 'bg-white border-blue-200 text-blue-700 shadow-sm font-bold'
+                              : 'border-transparent text-slate-500 hover:bg-slate-100'
+                          }`}
+                        >
+                          {topic}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-2 text-slate-900 mb-2">
+                      <Presentation className="w-4 h-4" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">PPT Source</span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                      Current: Slides {activeTopicData?.slides?.join(', ') || 'N/A'} of Unit {activeUnit.id.toUpperCase()}. 
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Lesson Text */}
-              <div className="flex-1">
+              <div className="flex-1 space-y-8">
                 {loadingContent ? (
-                  <div className="space-y-4 animate-pulse">
-                    <div className="h-8 bg-slate-200 rounded w-1/3"></div>
-                    <div className="h-64 bg-slate-200 rounded-xl"></div>
-                    <div className="space-y-2">
-                      <div className="h-4 bg-slate-200 rounded w-full"></div>
-                      <div className="h-4 bg-slate-200 rounded w-5/6"></div>
-                      <div className="h-4 bg-slate-200 rounded w-4/6"></div>
-                    </div>
+                  <div className="space-y-6 animate-pulse">
+                    <div className="h-10 bg-slate-200 rounded-lg w-3/4"></div>
+                    <div className="h-64 bg-slate-200 rounded-3xl"></div>
                   </div>
                 ) : (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-center gap-2 text-sm text-blue-600 font-medium mb-1">
-                      <span className="uppercase tracking-wide">{activeUnit.id}</span>
-                      <ChevronRight className="w-4 h-4" />
-                      <span>Lesson</span>
+                  <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
+                    <div className="mb-8">
+                      <div className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">
+                        <span>{activeUnit.title}</span>
+                      </div>
+                      <h1 className="text-4xl font-black text-slate-900 leading-tight">{activeTopic}</h1>
                     </div>
-                    
-                    <h1 className="text-3xl md:text-4xl font-bold text-slate-900">{activeTopic}</h1>
-                    
-                    {/* SVG Diagram Container */}
-                    {diagramSvg && (
-                       <div className="my-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
-                         <div 
-                           className="w-full max-w-md"
-                           dangerouslySetInnerHTML={{ __html: diagramSvg }} 
-                         />
-                         <p className="mt-3 text-xs text-slate-400 font-medium uppercase tracking-wide">AI Generated Schematic</p>
-                       </div>
-                    )}
 
-                    <div className="prose prose-slate max-w-none prose-lg prose-headings:text-slate-800 prose-a:text-blue-600">
-                      <ReactMarkdown>{lessonContent}</ReactMarkdown>
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+                      <div className="xl:col-span-7 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div id="lesson-markdown-container" className="p-8 md:p-10 prose prose-slate max-w-none prose-lg">
+                          <ReactMarkdown>{lessonContent}</ReactMarkdown>
+                        </div>
+                      </div>
+
+                      <div className="xl:col-span-5 space-y-8">
+                        <div className="sticky top-6 flex flex-col gap-8">
+                          {activeTopicData?.visualId && (
+                            <div className="w-full">
+                                <VisualReference visualId={activeTopicData.visualId} />
+                            </div>
+                          )}
+                          
+                          {activeTopicData?.equations && (
+                              <div className="p-8 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 text-white relative overflow-hidden group">
+                                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-3xl -mr-16 -mt-16 group-hover:bg-blue-500/20 transition-all duration-700"></div>
+                                  <div className="flex items-center justify-between mb-8 relative z-10">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                        <Sigma className="w-4 h-4 text-blue-400" />
+                                      </div>
+                                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Governing Equation</p>
+                                    </div>
+                                    <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded">Math Core</span>
+                                  </div>
+                                  <div className="overflow-x-auto relative z-10">
+                                      <div className="text-2xl font-light text-center py-6 min-h-[100px] flex items-center justify-center" id="topic-equation-box">
+                                          {activeTopicData.equations}
+                                      </div>
+                                  </div>
+                                  <div className="mt-6 pt-6 border-t border-slate-800 text-[10px] text-slate-500 italic text-center">
+                                    Refer to slide notes for full boundary condition derivations.
+                                  </div>
+                              </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -247,19 +324,15 @@ const App = () => {
             </div>
           )}
 
-          {/* View: SIMULATION */}
-          {currentView === View.SIMULATION && <Simulations />}
-
-          {/* View: QUIZ */}
-          {currentView === View.QUIZ && <Quiz unitId={activeUnit.id} unitTitle={activeUnit.title} />}
-
-          {/* View: CHAT */}
-          {currentView === View.CHAT && (
-            <div className="max-w-4xl mx-auto h-full">
-               <Chatbot />
-            </div>
-          )}
-
+          <div className="p-6 md:p-10">
+            {currentView === View.SIMULATION && <Simulations />}
+            {currentView === View.QUIZ && <Quiz unitId={activeUnit.id} unitTitle={activeUnit.title} />}
+            {currentView === View.CHAT && (
+              <div className="max-w-4xl mx-auto h-[calc(100vh-180px)]">
+                <Chatbot activeTopic={activeTopic} />
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>

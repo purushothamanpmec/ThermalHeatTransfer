@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { UnitId, QuizQuestion } from '../types';
-import { generateQuizQuestions } from '../services/geminiService';
-import { Loader2, CheckCircle2, XCircle, Trophy, AlertCircle, PlayCircle } from 'lucide-react';
+import { HARDCODED_QUIZ_DATA } from '../data/quizData';
+import { CheckCircle2, XCircle, Trophy, PlayCircle } from 'lucide-react';
 
 interface QuizProps {
   unitId: UnitId;
@@ -13,35 +13,28 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [score, setScore] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [quizStarted, setQuizStarted] = useState(false);
   const [quizFinished, setQuizFinished] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [difficulty, setDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
 
-  const startQuiz = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const generated = await generateQuizQuestions(unitTitle, difficulty);
-      if (generated && generated.length > 0) {
-        setQuestions(generated);
-        setQuizStarted(true);
-        setQuizFinished(false);
-        setCurrentQIndex(0);
-        setScore(0);
-        setSelectedOption(null);
-        setShowExplanation(false);
-      } else {
-        throw new Error("No questions generated.");
-      }
-    } catch (err) {
-      setError("Failed to generate quiz. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+  const startQuiz = () => {
+    // Filter questions by unitId and difficulty (or just unitId if we want to show all)
+    // For a customized experience, we fetch the 5 hard-coded questions for that unit
+    const unitQuestions = HARDCODED_QUIZ_DATA[unitId] || [];
+    
+    // Sort/Filter by difficulty if enough questions exist, otherwise show all unit questions
+    const filtered = unitQuestions.filter(q => q.difficulty === difficulty);
+    const finalSet = filtered.length > 0 ? filtered : unitQuestions;
+
+    setQuestions(finalSet);
+    setQuizStarted(true);
+    setQuizFinished(false);
+    setCurrentQIndex(0);
+    setScore(0);
+    setSelectedOption(null);
+    setShowExplanation(false);
   };
 
   const handleAnswer = (optionIndex: number) => {
@@ -70,7 +63,7 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
           <PlayCircle className="w-8 h-8" />
         </div>
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Quiz: {unitTitle}</h2>
-        <p className="text-slate-500 mb-8 max-w-sm">Test your grasp of the material with AI-generated questions adapted to your level.</p>
+        <p className="text-slate-500 mb-8 max-w-sm">Test your knowledge with professionally curated questions from the lecture series.</p>
         
         <div className="inline-flex p-1 bg-slate-100 rounded-lg mb-8">
           {(['Easy', 'Medium', 'Hard'] as const).map((d) => (
@@ -86,18 +79,11 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
           ))}
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-lg flex items-center gap-2 text-sm">
-            <AlertCircle className="w-4 h-4" /> {error}
-          </div>
-        )}
-
         <button
           onClick={startQuiz}
-          disabled={loading}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-all active:scale-95 flex items-center gap-3"
         >
-          {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Start Assessment'}
+          Start Assessment
         </button>
       </div>
     );
@@ -122,7 +108,7 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
   }
 
   const currentQ = questions[currentQIndex];
-  if (!currentQ) return <Loader2 className="animate-spin" />;
+  if (!currentQ) return <div className="text-center p-10">Loading questions...</div>;
 
   return (
     <div className="bg-white p-6 md:p-10 rounded-xl shadow-sm border border-slate-200 max-w-3xl mx-auto animate-in fade-in duration-500">
@@ -162,7 +148,7 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
 
       {showExplanation && (
         <div className="bg-slate-50 border-l-4 border-blue-500 p-6 rounded-r-xl mb-10 animate-in slide-in-from-left-4">
-          <h4 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-2">Scientific Explanation</h4>
+          <h4 className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-2">Detailed Explanation</h4>
           <p className="text-slate-700 text-sm leading-relaxed">{currentQ.explanation}</p>
         </div>
       )}
@@ -173,7 +159,7 @@ export const Quiz: React.FC<QuizProps> = ({ unitId, unitTitle }) => {
           disabled={selectedOption === null}
           className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold shadow-lg disabled:opacity-30 hover:bg-blue-700 transition-all active:scale-95"
         >
-          {currentQIndex === questions.length - 1 ? 'Finish Quiz' : 'Continue'}
+          {currentQIndex === questions.length - 1 ? 'Finish Quiz' : 'Next Question'}
         </button>
       </div>
     </div>
