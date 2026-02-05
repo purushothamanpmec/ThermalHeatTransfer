@@ -1,75 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <script>
-      /**
-       * CRITICAL: KaTeX fails in Quirks Mode.
-       * This polyfill forces document.compatMode to 'CSS1Compat' before KaTeX loads.
-       */
-      (function() {
-        if (document.compatMode === 'BackCompat') {
-          try {
-            Object.defineProperty(document, 'compatMode', {
-              get: function() { return 'CSS1Compat'; },
-              configurable: true
-            });
-          } catch (e) {
-            // Fallback for environments that don't support Object.defineProperty on document
-            document.__defineGetter__('compatMode', function() { return 'CSS1Compat'; });
-          }
-        }
-      })();
-      window.process = { env: { API_KEY: "" } }; // Placeholder shim
-    </script>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ThermoMaster - Heat & Mass Transfer</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-    
-    <!-- Load KaTeX Core -->
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+    >
+
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+    >
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 
     <style>
-      body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: #f8fafc; }
-      ::-webkit-scrollbar { width: 8px; }
-      ::-webkit-scrollbar-track { background: #f1f1f1; }
-      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      
-      .katex-display { 
-        margin: 1.5em 0; 
-        padding: 1.25em;
-        overflow-x: auto; 
-        overflow-y: hidden;
-        background: rgba(248, 250, 252, 0.95);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
+      body {
+        font-family: 'Inter', sans-serif;
+        margin: 0;
+        background: #f8fafc;
       }
-      .katex { font-size: 1.1em; line-height: 1.2; }
-      .prose p, .prose li { overflow-wrap: break-word; }
     </style>
-    
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
-  }
-}
-</script>
   </head>
+
   <body>
     <div id="root"></div>
+
+    <!-- 🔥 THIS WAS MISSING -->
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>

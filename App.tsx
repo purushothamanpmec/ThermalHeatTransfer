@@ -8,6 +8,10 @@ import { Quiz } from './components/Quiz';
 import { Chatbot } from './components/Chatbot';
 import { VisualReference } from './components/VisualReference';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 import { 
   BookOpen, 
   Menu, 
@@ -47,32 +51,7 @@ enum View {
  * Uses the auto-render extension of KaTeX.
  * Retries if the library is still loading.
  */
-const renderMath = (el: HTMLElement | null) => {
-  if (!el) return;
-  
-  const attempt = () => {
-    try {
-      if (typeof (window as any).renderMathInElement === 'function') {
-        (window as any).renderMathInElement(el, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
-          throwOnError: false,
-          trust: true
-        });
-      }
-    } catch (error) {
-      console.warn("KaTeX rendering deferred or failed:", error);
-    }
-  };
 
-  // Immediate attempt and a delayed one for React transition completeness
-  attempt();
-  setTimeout(attempt, 150);
-};
 
 const App = () => {
   const [activeUnit, setActiveUnit] = useState<Unit>(COURSE_CONTENT[0]);
@@ -91,15 +70,6 @@ const App = () => {
     }
   }, [activeTopic, activeUnit, currentView]);
 
-  useEffect(() => {
-    if (!loadingContent && currentView === View.LESSON) {
-      const timer = setTimeout(() => {
-        renderMath(document.getElementById('lesson-markdown-container'));
-        renderMath(document.getElementById('topic-equation-box'));
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [lessonContent, loadingContent, currentView, activeTopic]);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const activeTopicData = COURSE_PPT_DATA[activeTopic];
@@ -281,7 +251,12 @@ const App = () => {
                     <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
                       <div className="xl:col-span-7 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                         <div id="lesson-markdown-container" className="p-8 md:p-10 prose prose-slate max-w-none prose-lg">
-                          <ReactMarkdown>{lessonContent}</ReactMarkdown>
+                         <ReactMarkdown
+  remarkPlugins={[remarkMath]}
+  rehypePlugins={[rehypeKatex]}
+>
+  {lessonContent}
+</ReactMarkdown>
                         </div>
                       </div>
 
@@ -306,9 +281,15 @@ const App = () => {
                                     <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded">Math Core</span>
                                   </div>
                                   <div className="overflow-x-auto relative z-10">
-                                      <div className="text-2xl font-light text-center py-6 min-h-[100px] flex items-center justify-center" id="topic-equation-box">
-                                          {activeTopicData.equations}
-                                      </div>
+                                      <div className="text-2xl font-light text-center py-6 min-h-[100px] flex items-center justify-center">
+  <ReactMarkdown
+    remarkPlugins={[remarkMath]}
+    rehypePlugins={[rehypeKatex]}
+  >
+    {activeTopicData.equations}
+  </ReactMarkdown>
+</div>
+
                                   </div>
                                   <div className="mt-6 pt-6 border-t border-slate-800 text-[10px] text-slate-500 italic text-center">
                                     Refer to slide notes for full boundary condition derivations.
