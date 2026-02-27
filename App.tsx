@@ -57,7 +57,7 @@ const App = () => {
   const [activeUnit, setActiveUnit] = useState<Unit>(COURSE_CONTENT[0]);
   const [activeTopic, setActiveTopic] = useState<string>(COURSE_CONTENT[0].topics[0]);
   const [currentView, setCurrentView] = useState<View>(View.HOME);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [lessonContent, setLessonContent] = useState<string>("");
   const [loadingContent, setLoadingContent] = useState(false);
 
@@ -76,17 +76,34 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
-      <aside 
-        className={`${
-          sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full'
-        } fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out flex flex-col md:relative md:translate-x-0 overflow-hidden shadow-sm`}
-      >
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
-            <Thermometer className="text-white w-5 h-5" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-800">ThermoMaster</h1>
-        </div>
+      <aside
+  className={`
+    fixed inset-y-0 left-0 z-50
+    w-72 bg-white border-r border-slate-200
+    transform transition-transform duration-300 ease-in-out
+    ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+    md:translate-x-0 md:static md:w-72
+    flex flex-col shadow-sm
+  `}
+>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+  <div className="flex items-center gap-3">
+    <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+      <Thermometer className="text-white w-5 h-5" />
+    </div>
+    <h1 className="text-xl font-bold tracking-tight text-slate-800">
+      ThermoMaster
+    </h1>
+  </div>
+
+  {/* Close button (mobile only) */}
+  <button
+    onClick={() => setSidebarOpen(false)}
+    className="md:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-500"
+  >
+    ✕
+  </button>
+</div>
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-6">
           <button
@@ -160,6 +177,13 @@ const App = () => {
           </div>
         </nav>
       </aside>
+
+      {sidebarOpen && (
+  <div
+    className="fixed inset-0 bg-black/40 z-40 md:hidden"
+    onClick={() => setSidebarOpen(false)}
+  />
+)}
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center px-6 justify-between flex-shrink-0 z-10">
